@@ -65,11 +65,13 @@ public class CloseHangTest extends Configured {
   private static class UploadManager {
     private static final int NUM_THREADS = 20;
     private final UploadWorker workers[] = new UploadWorker[NUM_THREADS];
+
+    // last wall-clock time when each upload thread checked in.
     private final long lastCheckinTime[] = new long[NUM_THREADS];
 
-    // base10 logarithm of the number of seconds that thread was AWOL last time we
-    // printed a warning message.
-    private final int lastWarningDelta[] = new int[NUM_THREADS];
+    // The natural logarithm of the number of seconds that each upload thread was
+    // AWOL last time we printed a warning message for that thread.
+    private final int lastWarning[] = new int[NUM_THREADS];
 
     protected final FileSystem fs;
     private static final long MAX_CHECKIN_TIME = 30000; // must check in every 30 seconds or face a printf.
@@ -104,13 +106,13 @@ public class CloseHangTest extends Configured {
             // we assume no clock adjustments, etc.
             long delta = curTime - lastCheckinTime[workerId];
             if (delta > MAX_CHECKIN_TIME) {
-              Double logDelta = Math.log10(delta);
+              Double logDelta = Math.log(delta);
               int logDeltaFloor = logDelta.intValue();
-              if (logDeltaFloor > lastWarningDelta[workerId]) {
-                lastWarningDelta[workerId] = logDeltaFloor;
+              if (logDeltaFloor > lastWarning[workerId]) {
+                lastWarning[workerId] = logDeltaFloor;
                 System.out.println("At time " + new Date(curTime).toString() + 
                     ", WORKER " + workerId + " FAILED TO CHECK IN AFTER " +
-                    delta + " seconds!");
+                    (delta/1000) + " seconds!");
               }
             }
           }
@@ -120,12 +122,12 @@ public class CloseHangTest extends Configured {
 
     private synchronized void checkInWithManager(int workerId) {
       lastCheckinTime[workerId] = System.currentTimeMillis();
-      lastWarningDelta[workerId] = 0;
+      lastWarning[workerId] = 0;
     }
   }
 
   private static class UploadWorker extends Thread {
-    private static final int CLEANUP_INTERVAL = 1000;
+    private static final int CLEANUP_INTERVAL = 200;
     private UploadManager manager;
     private int workerId;
     private long generation;
